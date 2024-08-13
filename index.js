@@ -54,6 +54,23 @@ app.get("/api/articles",(req,res)=>{
     )
 })
 
+app.get("/api/articleContent/:id",(req,res)=>{
+    const id = req.params.id
+    connect.execute(
+        "SELECT * FROM `article` WHERE `id`= ? AND `article_delete` = 0",[id],
+        (err,content) => {
+            if(err){
+                console.log(err);
+                return
+            }
+            res.status(200).json({
+                status:"success",
+                message:"文章內容",
+                content
+            })
+        }
+    )
+})
 
 
 app.listen(3001,()=>{
