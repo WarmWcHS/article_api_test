@@ -18,25 +18,6 @@ app.get("/",(req,res)=>{
     res.send("首頁")
 })
 
-// app.get("/api/articles",(req,res)=>{
-//     let articles=db.data.article.map(a=>{
-//         const {article_delete,...other}=a
-//         return other
-//     })
-//     if(!articles){
-//         return res.status(404).json({
-//             // test
-//             status:"fail",
-//             message:"找不到文章"
-//         })
-//     }
-//     res.status(200).json({
-//         status:"success",
-//         message:"所有文章",
-//         articles
-//     })
-// })
-
 app.get("/api/articles",(req,res)=>{
     connect.execute(
         "SELECT * FROM `article` WHERE `article_delete` = 0 ORDER BY `create_at` DESC",
@@ -49,6 +30,44 @@ app.get("/api/articles",(req,res)=>{
                 status:"success",
                 message:"所有文章",
                 articles
+            })
+        }
+    )
+})
+
+app.get("/api/articles/:sort",(req,res)=>{
+    const sort = req.params.sort
+    if (sort){
+        connect.execute(
+            "SELECT * FROM `article` WHERE `article_delete` = 0 AND sort = ? ORDER BY `create_at` DESC",[sort],
+            (err,articles) => {
+                if(err){
+                    console.log(err);
+                    return
+                }
+                res.status(200).json({
+                    status:"success",
+                    message:"所有文章",
+                    articles
+                })
+            }
+        )
+    }
+
+})
+
+app.get("/api/sort",(req,res)=>{
+    connect.execute(
+        "SELECT * FROM `article_sort`",
+        (err,sorts) => {
+            if(err){
+                console.log(err);
+                return
+            }
+            res.status(200).json({
+                status:"success",
+                message:"所有分類",
+                sorts
             })
         }
     )
