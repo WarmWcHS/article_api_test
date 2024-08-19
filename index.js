@@ -5,28 +5,45 @@ import cors from "cors"
 import { JSONFile } from "lowdb/node"
 import connect from "./db.js"
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import fs from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+const uploadDir = path.join(__dirname, 'public', 'articleImg');
+if (!fs.existsSync(uploadDir)){
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
 // 設置文件儲存
 const storage = multer.diskStorage({
-  destination: function(req, file, cb) {
-    cb(null, 'public/articleImg');
-  },
-  filename: function(req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ storage: storage });
+    destination: function(req, file, cb) {
+      cb(null, path.join(__dirname, 'public', 'articleImg'));
+    },
+    filename: function(req, file, cb) {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+  });
+  
+  const upload = multer({ storage: storage });
+  
 
 const defaultDate = {article:[]}
 const db = new Low(new JSONFile("article.json"), defaultDate)
 await db.read()
+
+
+
+
+
+
+app.use('/public', express.static(path.join(__dirname, 'public')));
 
 app.get("/", (req, res) => {
     res.send("首頁")
@@ -147,18 +164,18 @@ app.get("/api/images/:id", (req, res) => {
         (err, rows) => {
             if (err) {
                 console.error(err);
-                return res.status(500).json({ message: "伺服器錯誤" });
+                return res.status(500).json({ message: "伺服器錯誤" })
             }
 
             if (rows.length === 0) {
-                return res.status(404).json({ message: "圖片未找到" });
+                return res.status(404).json({ message: "圖片未找到" })
             }
 
             const image = rows[0];
             res.json({ imagePath: image.img_path });
         }
-    );
-});
+    )
+})
 
 // 修改創建文章的 API 路由，以關聯上傳的圖片
 app.post("/api/createArticle", (req, res) => {
@@ -170,12 +187,12 @@ app.post("/api/createArticle", (req, res) => {
         (err, result) => {
             if (err) {
                 console.error(err);
-                return res.status(500).json({ status: 'error', message: '保存文章失敗' });
+                return res.status(500).json({ status: 'error', message: '保存文章失敗' })
             }
             
             const articleId = result.insertId;
 
-            // 如果有上傳圖片，更新 article_img 表中的 article_id
+            // 更新 article_img 表中的 article_id
             if (imageIds && imageIds.length > 0) {
                 const updatePromises = imageIds.map(imageId => 
                     new Promise((resolve, reject) => {
@@ -184,7 +201,7 @@ app.post("/api/createArticle", (req, res) => {
                             [articleId, imageId],
                             (updateErr) => {
                                 if (updateErr) reject(updateErr);
-                                else resolve();
+                                else resolve()
                             }
                         );
                     })
@@ -200,7 +217,7 @@ app.post("/api/createArticle", (req, res) => {
                     })
                     .catch(updateErr => {
                         console.error(updateErr);
-                        res.status(500).json({ status: 'error', message: '更新圖片關聯失敗，但文章已保存' });
+                        res.status(500).json({ status: 'error', message: '更新圖片關聯失敗，但文章已保存' })
                     });
             } else {
                 res.status(201).json({ 
@@ -210,8 +227,15 @@ app.post("/api/createArticle", (req, res) => {
                 });
             }
         }
-    );
-});
+    )
+})
+
+function extractImageIds(content) {
+    const regex = /imageId=(\d+)/g;
+    const matches = content.matchAll(regex);
+    return Array.from(matches, m => parseInt(m[1]));
+}
+
 
 app.listen(3001, () => {
     console.log("http://localhost:3001");
