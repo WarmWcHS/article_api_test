@@ -48,44 +48,80 @@ app.use('/public', express.static(path.join(__dirname, 'public')));
 app.get("/", (req, res) => {
     res.send("首頁")
 })
-
 app.get("/api/articles", (req, res) => {
-    connect.execute(
-        "SELECT * FROM `article` WHERE `article_delete` = 0 ORDER BY `create_at` DESC",
-        (err, articles) => {
-            if (err) {
-                console.log(err);
-                return
-            }
-            res.status(200).json({
-                status: "success",
-                message: "所有文章",
-                articles
-            })
-        }
-    )
-})
+    const sort = req.query.sort;
+    const search = req.query.search;
 
-app.get("/api/articles/:sort", (req, res) => {
-    const sort = req.params.sort
+    let query = "SELECT * FROM `article` WHERE `article_delete` = 0";
+    let params = [];
+
     if (sort) {
-        connect.execute(
-            "SELECT * FROM `article` WHERE `article_delete` = 0 AND sort = ? ORDER BY `create_at` DESC", [sort],
-            (err, articles) => {
-                if (err) {
-                    console.log(err);
-                    return
-                }
-                res.status(200).json({
-                    status: "success",
-                    message: "所有文章",
-                    articles
-                })
-            }
-        )
+        query += " AND sort = ?";
+        params.push(sort);
     }
 
+    if (search) {
+        query += " AND LOWER(title) LIKE LOWER(?)";
+        params.push(`%${search}%`);
+    }
+
+    query += " ORDER BY `create_at` DESC";
+
+    connect.execute(query, params, (err, articles) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({
+                status: "error",
+                message: "資料庫查詢錯誤"
+            });
+        }
+
+        res.status(200).json({
+            status: "success",
+            message: "文章列表",
+            articles
+        })
+    })
 })
+
+// app.get("/api/articles", (req, res) => {
+//     connect.execute(
+//         "SELECT * FROM `article` WHERE `article_delete` = 0 ORDER BY `create_at` DESC",
+//         (err, articles) => {
+//             if (err) {
+//                 console.log(err);
+//                 return
+//             }
+//             res.status(200).json({
+//                 status: "success",
+//                 message: "所有文章",
+//                 articles
+//             })
+//         }
+//     )
+// })
+
+// app.get("/api/articles/:sort", (req, res) => {
+//     const sort = req.params.sort
+//     if (sort) {
+//         connect.execute(
+//             "SELECT * FROM `article` WHERE `article_delete` = 0 AND sort = ? ORDER BY `create_at` DESC", [sort],
+//             (err, articles) => {
+//                 if (err) {
+//                     console.log(err);
+//                     return
+//                 }
+//                 res.status(200).json({
+//                     status: "success",
+//                     message: "所有文章",
+//                     articles
+//                 })
+//             }
+//         )
+//     }
+
+// })
+
 
 app.get("/api/sort", (req, res) => {
     connect.execute(
@@ -229,6 +265,31 @@ app.post("/api/createArticle", (req, res) => {
         }
     )
 })
+
+app.post("/api/createReply/:aid", (req, res) => {
+    const { content } = req.body;
+    const articleId = req.params.aid;
+    const userid = 0; // 這裡應該是從身份驗證中獲取的
+
+    console.log('Received articleId:', articleId);
+  
+    connect.execute(
+      'INSERT INTO `reply` (content, userid, article_id, create_at) VALUES (?, ?, ?, NOW())',
+      [content, userid, articleId],
+      (err, result) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ status: 'error', message: '保存回覆失敗' });
+        }
+  
+        res.status(201).json({ 
+          status: 'success', 
+          message: '回覆保存成功', 
+          replyId: result.insertId 
+        });
+      }
+    );
+  });
 
 function extractImageIds(content) {
     const regex = /imageId=(\d+)/g;
