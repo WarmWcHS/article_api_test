@@ -286,7 +286,6 @@ app.post("/api/createReply/:aid", (req, res) => {
   const articleId = req.params.aid;
   const userid = 0; // 這裡應該是從身份驗證中獲取的
 
-  console.log("Received articleId:", articleId);
 
   connect.execute(
     "INSERT INTO `reply` (content, userid, article_id, create_at) VALUES (?, ?, ?, NOW())",
