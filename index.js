@@ -281,6 +281,105 @@ app.post("/api/createArticle", (req, res) => {
   );
 });
 
+app.put("/api/editArticle/:id", (req, res) => {
+  const { title, content, sort, imageIds } = req.body;
+  const articleId = req.params.id;
+
+  console.log('收到請求:', { articleId, title, sort, imageIds });
+
+  // 步驟 1：更新文章基本資訊
+  connect.execute(
+    "UPDATE `article` SET title = ?, content = ?, sort = ? WHERE id = ?",
+    [title, content, sort, articleId],
+    (err, result) => {
+      if (err) {
+        console.error('更新文章時發生錯誤:', err);
+        return res.status(500).json({ status: "error", message: "更新文章失敗", error: err.message });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ status: "error", message: "文章不存在" });
+      }
+
+      // 步驟 2：將所有與該文章相關的圖片設置為未關聯狀態
+      connect.execute(
+        "UPDATE `article_img` SET article_id = 0 WHERE article_id = ?",
+        [articleId],
+        (unlinkErr) => {
+          if (unlinkErr) {
+            console.error('解除圖片關聯時發生錯誤:', unlinkErr);
+            return res.status(500).json({ status: "error", message: "解除圖片關聯失敗", error: unlinkErr.message });
+          }
+
+          // 步驟 3：更新應該保留的圖片關聯
+          const updateQuery = `
+            UPDATE article_img 
+            SET article_id = ?
+            WHERE SUBSTRING_INDEX(SUBSTRING_INDEX(img_path, '-', -2), '-', 1) IN (?)
+            AND (article_id = 0 OR article_id IS NULL)
+          `;
+
+          connect.query(updateQuery, [articleId, imageIds], (updateErr, updateResult) => {
+            if (updateErr) {
+              console.error('更新圖片關聯時發生錯誤:', updateErr);
+              return res.status(500).json({ status: "error", message: "更新圖片關聯失敗", error: updateErr.message });
+            }
+
+            // 步驟 4：刪除不再使用的圖片
+            const deleteQuery = `
+              DELETE FROM article_img 
+              WHERE article_id = 0
+              AND SUBSTRING_INDEX(SUBSTRING_INDEX(img_path, '-', -2), '-', 1) NOT IN (?)
+            `;
+
+            connect.query(deleteQuery, [imageIds], (deleteErr, deleteResult) => {
+              if (deleteErr) {
+                console.error('刪除未使用圖片時發生錯誤:', deleteErr);
+                return res.status(500).json({ status: "error", message: "刪除未使用圖片失敗", error: deleteErr.message });
+              }
+
+              res.status(200).json({
+                status: "success",
+                message: "文章更新成功，包括圖片更新",
+                articleId: articleId,
+                updatedImageCount: updateResult.affectedRows,
+                deletedImageCount: deleteResult.affectedRows
+              });
+            });
+          });
+        }
+      );
+    }
+  );
+});
+
+app.delete("/api/deleteArticle/:id", (req, res) => {
+  const articleId = req.params.id;
+
+  console.log('收到刪除文章請求:', { articleId });
+
+  connect.execute(
+    "UPDATE `article` SET article_delete = 1 WHERE id = ?",
+    [articleId],
+    (err, result) => {
+      if (err) {
+        console.error('刪除文章時發生錯誤:', err);
+        return res.status(500).json({ status: "error", message: "刪除文章失敗", error: err.message });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ status: "error", message: "文章不存在" });
+      }
+
+      res.status(200).json({
+        status: "success",
+        message: "文章已成功標記為刪除",
+        articleId: articleId
+      });
+    }
+  );
+});
+
 app.post("/api/createReply/:aid", (req, res) => {
   const { content } = req.body;
   const articleId = req.params.aid;
@@ -325,12 +424,6 @@ app.get("/api/replys/:aid", (req, res) => {
     }
   );
 });
-
-function extractImageIds(content) {
-  const regex = /imageId=(\d+)/g;
-  const matches = content.matchAll(regex);
-  return Array.from(matches, (m) => parseInt(m[1]));
-}
 
 app.listen(3001, () => {
   console.log("http://localhost:3001");
